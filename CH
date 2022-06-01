@@ -1,0 +1,738 @@
+#include <mysql.h>
+#include <stdio.h>
+# include <wiringPi.h>
+# include <softPwm.h>
+# include <stdint.h>
+# include <stdlib.h>
+# include <time.h>
+# include <wiringPiI2C.h>
+# include <wiringPiSPI.h>
+# include <string.h>
+
+# define channel 0
+
+#define RED1 3
+#define YELLOW1 5
+#define GREEN1 7
+
+#define RED2 11
+#define YELLOW2 13
+#define GREEN2 15
+
+#define RED3 36
+#define YELLOW3 40
+#define GREEN3 38
+
+
+
+
+void send_data(int8_t address, int8_t value)
+{
+	uint8_t data[2];
+	data[0]=address;
+	data[1]=value;
+	wiringPiSPIDataRW(channel,data,2);
+}
+void Init_max7219(void)
+{
+	//
+	send_data(0x09,0xff);
+	//
+	send_data(0x0A,0x07);
+	//
+	send_data(0x0B,7);
+	// 
+	send_data(0x0C,1);
+	send_data(0x0f,0);
+}
+
+int main(void) 
+{
+	int8_t r1,y1,g1,r2,y2,g2,r3,y3,g3, status1=0, status2=0, status3=0, mode1, mode2, mode3;
+	uint8_t a=0,b=0,c=0, time;
+	
+	wiringPiSetupPhys();
+	wiringPiSPISetup(channel,8000000);
+    Init_max7219();
+    
+	pinMode(RED1,OUTPUT);
+	pinMode(YELLOW1,OUTPUT);
+	pinMode(GREEN1,OUTPUT);
+
+	pinMode(RED2,OUTPUT);
+	pinMode(YELLOW2,OUTPUT);
+	pinMode(GREEN2,OUTPUT);
+	
+	pinMode(RED3,OUTPUT);
+	pinMode(YELLOW3,OUTPUT);
+	pinMode(GREEN3,OUTPUT);
+	
+	MYSQL *conn;
+	MYSQL_RES *res; // variable used to store DB data
+	MYSQL_ROW row;
+	char *server = "192.168.43.62";
+	char *user = "Trien";
+	char *password = "12346789t"; 
+	char *database = "CONTROL_TRAFFIC_LIGHTS";
+	while(1)
+	{
+		// Connect to database
+		conn = mysql_init(NULL);
+		mysql_real_connect(conn,server,user,password,database,0,NULL,0);
+		// Create sql command
+		char sql[256];
+		sprintf(sql,"select *from TIME");
+
+		// send SQL query
+		mysql_query(conn,sql);
+		res=mysql_store_result(conn);
+		row=mysql_fetch_row(res);
+		
+		// Lay cac gia tri thoi gian 
+		r1=atoi(row[0]);
+		y1=atoi(row[1]);
+		g1=atoi(row[2]);
+		r2=atoi(row[4]);
+		y2=atoi(row[5]);
+		g2=atoi(row[6]);
+		r3=atoi(row[8]);
+		y3=atoi(row[9]);
+		g3=atoi(row[10]);
+		mode1=atoi(row[12]);
+		mode2=atoi(row[13]);
+		mode3=atoi(row[14]);
+		
+		// Hien thi dau gach
+		send_data(3,0x0A);
+		send_data(6,0x0A);
+
+		// Che do sang tung den manual
+		if(atoi(row[3])==1 && mode1==1)
+		{
+			status1=1;
+			digitalWrite(RED1,HIGH);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(GREEN1,LOW);
+			send_data(7,0);
+			send_data(8,0);
+
+		}
+		if(atoi(row[3])==2 && mode1==1)
+		{
+			status1=2;
+			digitalWrite(RED1,LOW);
+			digitalWrite(YELLOW1,HIGH);
+			digitalWrite(GREEN1,LOW);
+			send_data(7,0);
+			send_data(8,0);			
+
+		}
+		if(atoi(row[3])==3 && mode1==1)
+		{
+			status1=3;
+			digitalWrite(RED1,LOW);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(GREEN1,HIGH);
+			send_data(7,0);
+			send_data(8,0);
+		}
+		
+		if(atoi(row[7])==1 && mode2==1)
+		{
+			status2=1;
+			digitalWrite(RED2,HIGH);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(GREEN2,LOW);
+			send_data(4,0);
+			send_data(5,0);
+
+		}
+		if(atoi(row[7])==2 && mode2==1)
+		{
+			status2=2;
+			digitalWrite(RED2,LOW);
+			digitalWrite(YELLOW2,HIGH);
+			digitalWrite(GREEN2,LOW);
+			send_data(4,0);
+			send_data(5,0);
+		}
+		if(atoi(row[7])==3 && mode2==1)
+		{
+			status2=3;
+			digitalWrite(RED2,LOW);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(GREEN2,HIGH);
+			send_data(4,0);
+			send_data(5,0);
+		}
+ 
+		if(atoi(row[11])==1 && mode3==1)
+		{
+			status3=1;
+			digitalWrite(RED3,HIGH);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(GREEN3,LOW);
+			send_data(1,0);
+			send_data(2,0);
+		}
+		if(atoi(row[11])==2 && mode3==1)
+		
+		{
+			status3=2;
+			digitalWrite(RED3,LOW);
+			digitalWrite(YELLOW3,HIGH);
+			digitalWrite(GREEN3,LOW);
+			send_data(1,0);
+			send_data(2,0);			
+		}
+		if(atoi(row[11])==3 && mode3==1)
+		{
+			status3=3;
+			digitalWrite(RED3,LOW);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(GREEN3,HIGH);
+			send_data(1,0);
+			send_data(2,0);
+		}
+		 
+		// Gui cac bien mode va status vao table DISPLAY2
+		char sql2[200];
+		sprintf(sql2,"update DISPLAY2 set MODE1=%d, MODE2=%d, MODE3=%d, STATUS1=%d, STATUS2=%d,STATUS3=%d", mode1, mode2, mode3, status1, status2, status3 );
+		mysql_query(conn,sql2);;		
+
+		if(mode1==0 && mode2==0 && mode3==0)
+		{
+			time=g1;
+			digitalWrite(GREEN1,HIGH);
+			digitalWrite(GREEN2,HIGH);
+			digitalWrite(GREEN3,HIGH);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(RED1,LOW);
+			digitalWrite(RED2,LOW);
+			digitalWrite(RED3,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,g1%10);
+				send_data(8,g1/10);
+				send_data(4,g2%10);
+				send_data(5,g2/10);
+				send_data(1,g3%10);
+				send_data(2,g3/10);
+				g1--;
+				g2--;
+				g3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set GREEN=%d",g1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+
+			time=y1;
+			digitalWrite(GREEN1,LOW);
+			digitalWrite(GREEN2,LOW);
+			digitalWrite(GREEN3,LOW);
+			digitalWrite(YELLOW1,HIGH);
+			digitalWrite(YELLOW2,HIGH);
+			digitalWrite(YELLOW3,HIGH);
+			digitalWrite(RED1,LOW);
+			digitalWrite(RED2,LOW);
+			digitalWrite(RED3,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,y1%10);
+				send_data(8,y1/10);
+				send_data(4,y2%10);
+				send_data(5,y2/10);
+				send_data(1,y3%10);
+				send_data(2,y3/10);
+				y1--;
+				y2--;
+				y3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set YELLOW=%d",y1);
+				mysql_query(conn,sql2);				
+				delay(1000);
+			}
+			
+			
+			time=r1;
+			digitalWrite(GREEN1,LOW);
+			digitalWrite(GREEN2,LOW);
+			digitalWrite(GREEN3,LOW);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(RED1,HIGH);
+			digitalWrite(RED2,HIGH);
+			digitalWrite(RED3,HIGH);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,r1%10);
+				send_data(8,r1/10);
+				send_data(4,r2%10);
+				send_data(5,r2/10);
+				send_data(1,r3%10);
+				send_data(2,r3/10);
+				r1--;
+				r2--;
+				r3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set RED=%d",r1);
+				mysql_query(conn,sql2);				
+				delay(1000);
+			}
+		}
+		if(mode1==1 && mode2==0 && mode3==0)
+		{
+			time=g2;
+			
+			digitalWrite(GREEN2,HIGH);
+			digitalWrite(GREEN3,HIGH);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(RED2,LOW);
+			digitalWrite(RED3,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,g2%10);
+				send_data(5,g2/10);
+				send_data(1,g3%10);
+				send_data(2,g3/10);
+				g1--;
+				g2--;
+				g3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set GREEN=%d",g2);
+				mysql_query(conn,sql2);				
+				delay(1000);
+			}
+
+			time=y2;
+			digitalWrite(GREEN2,LOW);
+			digitalWrite(GREEN3,LOW);
+			digitalWrite(YELLOW2,HIGH);
+			digitalWrite(YELLOW3,HIGH);
+			digitalWrite(RED2,LOW);
+			digitalWrite(RED3,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,y2%10);
+				send_data(5,y2/10);
+				send_data(1,y3%10);
+				send_data(2,y3/10);
+				y1--;
+				y2--;
+				y3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set YELLOW=%d",y2);
+				mysql_query(conn,sql2);				
+				delay(1000);
+			}
+			
+			
+			time=r2;
+			digitalWrite(GREEN2,LOW);
+			digitalWrite(GREEN3,LOW);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(RED2,HIGH);
+			digitalWrite(RED3,HIGH);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,r2%10);
+				send_data(5,r2/10);
+				send_data(1,r3%10);
+				send_data(2,r3/10);
+				r1--;
+				r2--;
+				r3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set RED=%d",r2);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+		}
+		if(mode1==1 && mode2==0 && mode3==1)
+		{
+			time=g2;
+			digitalWrite(GREEN2,HIGH);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(RED2,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,g2%10);
+				send_data(5,g2/10);
+				send_data(1,0);
+				send_data(2,0);
+				g1--;
+				g2--;
+				g3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set GREEN=%d",g2);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+
+			time=y2;
+			digitalWrite(GREEN2,LOW);
+			digitalWrite(YELLOW2,HIGH);
+			digitalWrite(RED2,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,y2%10);
+				send_data(5,y2/10);
+				send_data(1,0);
+				send_data(2,0);
+				y1--;
+				y2--;
+				y3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set YELLOW=%d",y2);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+				
+			time=r2;
+			digitalWrite(GREEN2,LOW);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(RED2,HIGH);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,r2%10);
+				send_data(5,r2/10);
+				send_data(1,0);
+				send_data(2,0);
+				r1--;
+				r2--;
+				r3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set RED=%d",r2);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+		}
+		if(mode1==1 && mode2==1 && mode3==0)
+		{
+			time=g3;
+			digitalWrite(GREEN3,HIGH);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(RED3,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,g3%10);
+				send_data(2,g3/10);
+				g1--;
+				g2--;
+				g3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set GREEN=%d",g3);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+
+			time=y3;
+			digitalWrite(GREEN3,LOW);
+			digitalWrite(YELLOW3,HIGH);
+			digitalWrite(RED3,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,y3%10);
+				send_data(2,y3/10);
+				y1--;
+				y2--;
+				y3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set YELLOW=%d",y3);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+			
+			
+			time=r3;
+			digitalWrite(GREEN3,LOW);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(RED3,HIGH);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,0);
+				send_data(8,0);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,r3%10);
+				send_data(2,r3/10);
+				r1--;
+				r2--;
+				r3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set RED=%d",r3);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+		}
+		if(mode1==0 && mode2==0 && mode3==1)
+		{
+			time=g1;
+			digitalWrite(GREEN1,HIGH);
+			digitalWrite(GREEN2,HIGH);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(RED1,LOW);
+			digitalWrite(RED2,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,g1%10);
+				send_data(8,g1/10);
+				send_data(4,g2%10);
+				send_data(5,g2/10);
+				send_data(1,0);
+				send_data(2,0);
+				g1--;
+				g2--;
+				g3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set GREEN=%d",g1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+
+			time=y1;
+			digitalWrite(GREEN1,LOW);
+			digitalWrite(GREEN2,LOW);
+			digitalWrite(YELLOW1,HIGH);
+			digitalWrite(YELLOW2,HIGH);
+			digitalWrite(RED1,LOW);
+			digitalWrite(RED2,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,y1%10);
+				send_data(8,y1/10);
+				send_data(4,y2%10);
+				send_data(5,y2/10);
+				send_data(1,0);
+				send_data(2,0);
+				y1--;
+				y2--;
+				y3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set YELLOW=%d",y1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+			
+			
+			time=r1;
+			digitalWrite(GREEN1,LOW);
+			digitalWrite(GREEN2,LOW);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(YELLOW2,LOW);
+			digitalWrite(RED1,HIGH);
+			digitalWrite(RED2,HIGH);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,r1%10);
+				send_data(8,r1/10);
+				send_data(4,r2%10);
+				send_data(5,r2/10);
+				send_data(1,0);
+				send_data(2,0);
+				r1--;
+				r2--;
+				r3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set RED=%d",r1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+		}
+		if(mode1==0 && mode2==1 && mode3==0)
+		{
+			time=g1;
+			digitalWrite(GREEN1,HIGH);
+			digitalWrite(GREEN3,HIGH);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(RED1,LOW);
+			digitalWrite(RED3,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,g1%10);
+				send_data(8,g1/10);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,g3%10);
+				send_data(2,g3/10);
+				g1--;
+				g2--;
+				g3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set GREEN=%d",g1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+
+			time=y1;
+			digitalWrite(GREEN1,LOW);
+			digitalWrite(GREEN3,LOW);
+			digitalWrite(YELLOW1,HIGH);
+			digitalWrite(YELLOW3,HIGH);
+			digitalWrite(RED1,LOW);
+			digitalWrite(RED3,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,y1%10);
+				send_data(8,y1/10);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,y3%10);
+				send_data(2,y3/10);
+				y1--;
+				y2--;
+				y3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set YELLOW=%d",y1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+			
+			
+			time=r1;
+			digitalWrite(GREEN1,LOW);
+			digitalWrite(GREEN3,LOW);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(YELLOW3,LOW);
+			digitalWrite(RED1,HIGH);
+			digitalWrite(RED3,HIGH);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,r1%10);
+				send_data(8,r1/10);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,r3%10);
+				send_data(2,r3/10);
+				r1--;
+				r2--;
+				r3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set RED=%d",r1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+		}
+		if(mode1==0 && mode2==1 && mode3==1)
+		{
+			time=g1;
+			digitalWrite(GREEN1,HIGH);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(RED1,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,g1%10);
+				send_data(8,g1/10);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,0);
+				send_data(2,0);
+				g1--;
+				g2--;
+				g3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set GREEN=%d",g1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+
+			time=y1;
+			digitalWrite(GREEN1,LOW);
+			digitalWrite(YELLOW1,HIGH);
+			digitalWrite(RED1,LOW);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,y1%10);
+				send_data(8,y1/10);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,0);
+				send_data(2,0);
+				y1--;
+				y2--;
+				y3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set YELLOW=%d",y1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+			
+			time=r1;
+			digitalWrite(GREEN1,LOW);
+			digitalWrite(YELLOW1,LOW);
+			digitalWrite(RED1,HIGH);
+			for(int8_t i=time;i>=0;i--)
+			{
+				send_data(7,r1%10);
+				send_data(8,r1/10);
+				send_data(4,0);
+				send_data(5,0);
+				send_data(1,0);
+				send_data(2,0);
+				r1--;
+				r2--;
+				r3--;
+				time--;
+				char sql2[200];
+				sprintf(sql2,"update DISPLAY2 set RED=%d",r1);
+				mysql_query(conn,sql2);
+				delay(1000);
+			}
+		}
+	
+		// Close connect
+		mysql_close(conn);
+		
+
+	}
+return 0;
+}
+
